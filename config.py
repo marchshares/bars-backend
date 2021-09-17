@@ -11,4 +11,4 @@ CDEK_ACCOUNT = os.environ.get('CDEK_ACCOUNT', CDEK_ACCOUNT)
 CDEK_SECURE = os.environ.get('CDEK_SECURE', CDEK_SECURE)
 BOT_TOKEN = os.environ.get('BOT_TOKEN', BOT_TOKEN)
 
-logging.basicConfig(format='%(levelname)s:%(asctime)s %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(levelname)s:%(asctime)s: %(module)s: %(message)s', level=logging.INFO)

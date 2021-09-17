@@ -17,7 +17,8 @@ def zip_project(project_path):
     with zipfile.ZipFile(project_zip_path, "w") as zf:
         for dirname, subdirs, files in os.walk(project_path):
             relpath = os.path.relpath(dirname, project_path)
-            if relpath.startswith(".") and relpath != ".":
+            if relpath.startswith(".") and relpath != "." or \
+                    "__pycache__" in relpath:
                 continue
 
             for filename in files:
@@ -29,7 +30,7 @@ def zip_project(project_path):
 
                 print("Added: ", file_path_in_zip)
 
-                zf.write(file_path, filename)
+                zf.write(file_path, file_path_in_zip)
 
     print("Zipped: ", project_zip_filename)
     return zf.filename
