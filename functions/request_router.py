@@ -4,7 +4,8 @@ import re
 from typing import List, Dict, AnyStr
 from functions.message.message_publisher import MessagePublisher
 from functions.services import ServiceController
-from functions.services.dummy_controller import DummyController
+from functions.services.cdek_controller import CdekController
+from functions.services.telegram_controller import TelegramController
 
 
 def handler(request, context):
@@ -18,7 +19,8 @@ class RequestRouter():
 
     def __init__(self):
         self.map_path_to_controller = {
-            "/dummy": DummyController()
+            "/cdek-notification": CdekController(),
+            "/telegram": TelegramController()
         }
 
         publisher = MessagePublisher()

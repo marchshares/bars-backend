@@ -11,11 +11,22 @@ class MessagePublisher():
 
     def __init__(self):
         self._consumers = []
+        self._consumers_counter = 0
 
     def register(self, consumer: MessageConsumer):
-        logging.info("Register consumer: %s", consumer.get_name())
+        consumer.set_id(self.next_id())
         self._consumers.append(consumer)
 
-    def publish(self, message : Message):
-        for c in self._consumers:
-            c.consume_message(message)
+        logging.info(f"Register consumer: {consumer.get_name()}")
+
+    def publish(self, message: Message):
+        logging.info(f"Publish message: {message}")
+
+        creator_name = message.get_creator_name()
+        for consumer in self._consumers:
+            if not consumer.is_me(creator_name):
+                consumer.consume_message(message)
+
+    def next_id(self):
+        self._consumers_counter += 1
+        return self._consumers_counter

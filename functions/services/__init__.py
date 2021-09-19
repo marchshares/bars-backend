@@ -12,7 +12,7 @@ class ServiceController(MessageConsumer, ABC):
         self._message_publisher = message_publisher
 
     @abstractmethod
-    def consume_request(self, request_body: dict):
+    def consume_request(self, request_body):
         pass
 
     def publish_message(self, msg: Message):
