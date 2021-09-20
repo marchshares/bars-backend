@@ -13,16 +13,22 @@ class MessageType(Enum):
 
 class Message():
 
-    def __init__(self, m_type: MessageType, body: dict, creator_name):
-        self.m_type = m_type
-        self.body = copy.deepcopy(body)
+    def __init__(self, tp: MessageType, body: dict, creator_name):
+        self._tp = tp
+        self._body = copy.deepcopy(body)
         self._creator_name = creator_name
 
-        self.body['message_created'] = datetime.datetime.today().strftime(DATE_FORMAT)
+        self._body['message_created'] = datetime.datetime.today().strftime(DATE_FORMAT)
+
+    def get_type(self):
+        return self._tp
+
+    def get_body(self):
+        return self._body
 
     def get_creator_name(self):
         return self._creator_name
 
     def __str__(self) -> str:
-        return str(self.m_type) + ": " + str(self.body)
+        return str(self._tp) + ": " + str(self._body)
 

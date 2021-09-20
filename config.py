@@ -10,5 +10,17 @@ BOT_TOKEN = ""
 CDEK_ACCOUNT = os.environ.get('CDEK_ACCOUNT', CDEK_ACCOUNT)
 CDEK_SECURE = os.environ.get('CDEK_SECURE', CDEK_SECURE)
 BOT_TOKEN = os.environ.get('BOT_TOKEN', BOT_TOKEN)
+BOT_CHAT_ID = os.environ.get('BOT_CHAT_ID', BOT_CHAT_ID)
 
-logging.basicConfig(format='%(levelname)s:%(asctime)s: %(module)s: %(message)s', level=logging.INFO)
+IS_LOCAL = os.environ.get('USERNAME') is not None
+
+# logging
+logging.getLogger().setLevel(logging.INFO)
+
+if IS_LOCAL:
+    logging.basicConfig(format='[%(levelname)s] %(asctime)s: %(module)-20s%(message)s')
+else:
+    root_handler = logging.getLogger().handlers[0]
+    root_handler.setFormatter(
+        logging.Formatter('[%(levelname)s] %(asctime)s: [%(request_id)s] %(module)-20s%(message)s')
+    )

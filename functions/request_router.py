@@ -41,6 +41,8 @@ class RequestRouter():
         logging.info("User controller: " + controller.get_name())
         controller.consume_request(body)
 
+        return RequestRouter.build_ok_result()
+
     def extract_path(self, request):
         path = request['path']
 

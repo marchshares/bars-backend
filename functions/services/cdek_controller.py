@@ -1,7 +1,10 @@
 import logging
 import json
-from functions.message import Message, MessageType
+import datetime
+from functions.message import Message, MessageType, DATE_FORMAT
 from functions.services import ServiceController
+
+CDEK_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S+%f"
 
 IMPORTANT_STATUS_CODES = [
     "1",
@@ -67,6 +70,7 @@ class CdekController(ServiceController):
         order_attrs = order_status['attributes']
         order_status_code = order_attrs['status_code']
         order_status_text = MAP_CODE_TO_STATUS[order_status_code]
+        order_status_date = get_hr_date(order_attrs['status_date_time'])
 
         if order_status_code not in IMPORTANT_STATUS_CODES:
             logging.info(f"order_status: {order_status_text}(code={order_status_code}) not important. Skip")
@@ -76,7 +80,8 @@ class CdekController(ServiceController):
             {
                 "order_id": order_attrs['number'],
                 "cdek_number": order_attrs['cdek_number'],
-                "order_status": order_status_text
+                "order_status": order_status_text,
+                "order_status_date": order_status_date
             },
             creator_name=self.get_name()
         )
@@ -86,3 +91,7 @@ class CdekController(ServiceController):
     def consume_message(self, msg: Message):
         logging.info(msg)
 
+
+def get_hr_date(cdek_status_date_time):
+    dt = datetime.datetime.strptime(cdek_status_date_time, CDEK_DATE_FORMAT)
+    return dt.strftime(DATE_FORMAT)
