@@ -14,7 +14,7 @@ class CdekController(ServiceController):
     _delivery_status_map: Dict[AnyStr, Dict]
 
     def __init__(self) -> None:
-        self._delivery_status_map = utils.load_data("data/cdek_delivery_statuses.csv", "status_code")
+        self._delivery_status_map = utils.load_data("functions/data/cdek_delivery_statuses.csv", "status_code")
 
     def consume_request(self, request_body: str):
         """
@@ -67,7 +67,7 @@ class CdekController(ServiceController):
 
     def is_important_status_code(self, cdek_order_status_code):
         row = self._delivery_status_map.get(cdek_order_status_code)
-        return row['order_status'] is not None
+        return row['order_status'] != ''
 
     def consume_message(self, msg: Message):
         logging.info(msg)
