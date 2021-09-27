@@ -25,7 +25,11 @@ class MessagePublisher():
         creator_name = message.get_creator_name()
         for consumer in self._consumers:
             if not consumer.is_me(creator_name):
-                consumer.consume_message(message)
+                try:
+                    consumer.consume_message(message)
+                except Exception as e:
+                    logging.exception(f"{consumer.get_name()}: error during message processing")
+
 
     def next_id(self):
         self._consumers_counter += 1

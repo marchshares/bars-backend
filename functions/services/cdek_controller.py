@@ -1,49 +1,20 @@
 import logging
 import json
 import datetime
-from functions.message import Message, MessageType, DATE_FORMAT
+from typing import Dict, AnyStr
+
+from functions import utils
+from functions.message import Message, HR_DATE_FORMAT, OrderStatusMessage
 from functions.services import ServiceController
 
 CDEK_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S+%f"
 
-IMPORTANT_STATUS_CODES = [
-    "1",
-    "2",
-    "3",
-    "12",
-    "11",
-    "18",
-    "4",
-    "5"
-]
-MAP_CODE_TO_STATUS = {
-    "1": "Создан",
-    "2": "Удален",
-    "3": "Принят на склад отправителя",
-    "12": "Принят на склад до востребования",
-    "11": "Выдан на доставку",
-    "18": "Возвращен на склад доставки",
-    "4": "Вручен",
-    "5": "Не вручен",
-
-    "6": "Выдан на отправку в г. отправителе",
-    "16": "Возвращен на склад отправителя",
-    "7": "Сдан перевозчику в г. отправителе",
-    "21": "Отправлен в г. транзит",
-    "22": "Встречен в г. транзите",
-    "13": "Принят на склад транзита",
-    "17": "Возвращен на склад транзита",
-    "19": "Выдан на отправку в г. транзите",
-    "20": "Сдан перевозчику в г. транзите",
-    "27": "Отправлен в г. отправитель",
-    "8": "Отправлен в г. получатель",
-    "28": "Встречен в г. отправителе",
-    "9": "Встречен в г. получателе",
-    "10": "Принят на склад доставки"
-}
-
 
 class CdekController(ServiceController):
+    _delivery_status_map: Dict[AnyStr, Dict]
+
+    def __init__(self) -> None:
+        self._delivery_status_map = utils.load_data("data/cdek_delivery_statuses.csv", "status_code")
 
     def consume_request(self, request_body: str):
         """
@@ -65,33 +36,57 @@ class CdekController(ServiceController):
         :return:
         """
 
-        order_status = json.loads(request_body)
+        obj = CdekOrderStatusObj(request_body)
+        status_code = obj.status_code
 
-        order_attrs = order_status['attributes']
-        order_status_code = order_attrs['status_code']
-        order_status_text = MAP_CODE_TO_STATUS[order_status_code]
-        order_status_date = get_hr_date(order_attrs['status_date_time'])
+        delivery_row = self._delivery_status_map.get(status_code)
+        if delivery_row is None:
+            raise Exception(f"Unknown cdek_order_status_code={status_code}")
 
-        if order_status_code not in IMPORTANT_STATUS_CODES:
-            logging.info(f"order_status: {order_status_text}(code={order_status_code}) not important. Skip")
+        obj.status_text = delivery_row['status_text']
+        order_status = delivery_row['order_status']
+
+        if not self.is_important_status_code(status_code):
+            logging.info(f"cdek_order_status: {obj.status_text}(code={status_code}) not important. Skip")
             return
 
-        message = Message(MessageType.ORDER_STATUS_CHANGED,
-            {
-                "order_id": order_attrs['number'],
-                "cdek_number": order_attrs['cdek_number'],
-                "order_status": order_status_text,
-                "order_status_date": order_status_date
-            },
-            creator_name=self.get_name()
+        self.publish_message(
+            self.create_order_status_message(obj, order_status)
         )
 
-        self.publish_message(message)
+    def create_order_status_message(self, obj, order_status):
+        return OrderStatusMessage(self.get_name(),
+            order_id=obj.number,
+            order_status=order_status,
+            delivery_name="Cdek",  # TODO: replace to enum names of delivery companies
+            delivery_id=obj.cdek_number,
+            delivery_status=obj.status_text,
+            delivery_city=obj.city_name,
+            delivery_status_date=get_hr_date(obj.status_date_time)
+      )
+
+    def is_important_status_code(self, cdek_order_status_code):
+        row = self._delivery_status_map.get(cdek_order_status_code)
+        return row['order_status'] is not None
 
     def consume_message(self, msg: Message):
         logging.info(msg)
 
 
-def get_hr_date(cdek_status_date_time):
+class CdekOrderStatusObj:
+    status_text: AnyStr = None
+
+    def __init__(self, request_body):
+        body = json.loads(request_body)
+        attrs = body['attributes']
+
+        self.status_code = attrs['status_code']
+        self.cdek_number = attrs['cdek_number']
+        self.number = attrs['number']
+        self.status_date_time = attrs['status_date_time']
+        self.city_name = attrs['city_name']
+
+
+def get_hr_date(cdek_status_date_time) -> str:
     dt = datetime.datetime.strptime(cdek_status_date_time, CDEK_DATE_FORMAT)
-    return dt.strftime(DATE_FORMAT)
+    return dt.strftime(HR_DATE_FORMAT)
