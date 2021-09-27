@@ -8,6 +8,8 @@ BOT_TOKEN = ""
 BOT_CHAT_ID = ""
 MOYSKLAD_LOGIN = ""
 MOYSKLAD_PASSWORD = ""
+SMSAERO_LOGIN = ""
+SMSAERO_PASSWORD = ""
 # --------------------------------------
 
 CDEK_ACCOUNT = os.environ.get('CDEK_ACCOUNT', CDEK_ACCOUNT)
@@ -16,6 +18,8 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN', BOT_TOKEN)
 BOT_CHAT_ID = os.environ.get('BOT_CHAT_ID', BOT_CHAT_ID)
 MOYSKLAD_LOGIN = os.environ.get('MOYSKLAD_LOGIN', MOYSKLAD_LOGIN)
 MOYSKLAD_PASSWORD = os.environ.get('MOYSKLAD_PASSWORD', MOYSKLAD_PASSWORD)
+SMSAERO_LOGIN = os.environ.get('SMSAERO_LOGIN', SMSAERO_LOGIN)
+SMSAERO_PASSWORD = os.environ.get('SMSAERO_PASSWORD', SMSAERO_PASSWORD)
 
 IS_LOCAL = os.environ.get('USERNAME') is not None
 
