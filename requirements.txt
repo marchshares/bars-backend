@@ -2,3 +2,5 @@ pytelegrambotapi==4.0.0
 fs-moysklad-api==0.5.1
 requests~=2.24.0
 boto3~=1.18.38
+google-api-python-client==2.37.0
+oauth2client==4.1.3

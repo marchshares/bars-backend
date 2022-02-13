@@ -22,3 +22,7 @@ def auto_str(cls):
         )
     cls.__str__ = __str__
     return cls
+
+
+def none2empty(s: str) -> str:
+    return s if s else ""
