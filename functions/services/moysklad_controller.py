@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, AnyStr
+from typing import Dict, AnyStr, Optional
 
 from moysklad.queries import Expand, Filter, Query, Search, Select
 
@@ -34,9 +34,10 @@ class MoySkladClient():
     api_project_id = "a1688770-8ce5-11ec-0a80-05e60023f07c"
     attr_delivery_company_id = "6ad182c0-dff9-11eb-0a80-03680022940d"
 
-    map_order_state_to_href: Dict[AnyStr, AnyStr]
-    map_store_to_href: Dict[AnyStr, AnyStr]
-    map_product_to_href: Dict[AnyStr, AnyStr]
+    __map_order_state_to_href: Dict[AnyStr, AnyStr] = None
+    __map_store_to_href: Dict[AnyStr, AnyStr] = None
+    __map_product_to_href: Dict[AnyStr, AnyStr] = None
+    __map_service_to_href: Dict[AnyStr, AnyStr] = None
 
     def __init__(self, login, password):
         self._sklad = MoySklad.get_instance(login, password)
@@ -44,32 +45,49 @@ class MoySkladClient():
         self.endpoint = self._http_client.endpoint
         self.urls = self._sklad.get_methods()
 
-        self.__init_maps()
+    @property
+    def map_order_state_to_href(self):
+        if self.__map_order_state_to_href is None:
+            self.__map_order_state_to_href = self._get_meta_href_map(
+                entity_url=ApiUrls.get_customerorder_metadata_entity_url(),
+                data_section_name='states'
+            )
+            logging.info(f"Lazy loaded order_states_map, size={len(self.map_order_state_to_href)}")
 
-    def __init_maps(self):
-        self.map_order_state_to_href = self._get_meta_href_map(
-            entity_url=ApiUrls.get_customerorder_metadata_entity_url(),
-            data_section_name='states'
-        )
-        logging.info(f"Loaded order_states_map, size={len(self.map_order_state_to_href)}")
+        return self.__map_order_state_to_href
 
-        self.map_store_to_href = self._get_meta_href_map(
-            entity_url=ApiUrls.get_store_entity_url()
-        )
-        logging.info(f"Loaded stores_map, size={len(self.map_store_to_href)}")
+    @property
+    def map_store_to_href(self):
+        if self.__map_store_to_href is None:
+            self.__map_store_to_href = self._get_meta_href_map(
+                entity_url=ApiUrls.get_store_entity_url()
+            )
+            logging.info(f"Lazy loaded stores_map, size={len(self.map_store_to_href)}")
 
-        self.map_product_to_href = self._get_meta_href_map(
-            entity_url=ApiUrls.get_product_entity_url(),
-            key_field_name='article',
-            # query=Query(Filter().eq('archived', "true") + Filter().eq('archived', "false"))
-        )
-        logging.info(f"Loaded products_map, size={len(self.map_product_to_href)}")
+        return self.__map_store_to_href
 
-        self.map_service_to_href = self._get_meta_href_map(
-            entity_url=ApiUrls.get_service_entity_url(),
-            key_field_name='code',
-        )
-        logging.info(f"Loaded services_map, size={len(self.map_service_to_href)}")
+    @property
+    def map_product_to_href(self):
+        if self.__map_product_to_href is None:
+            self.__map_product_to_href = self._get_meta_href_map(
+                entity_url=ApiUrls.get_product_entity_url(),
+                key_field_name='article',
+                # query=Query(Filter().eq('archived', "true") + Filter().eq('archived', "false"))
+            )
+            logging.info(f"Lazy loaded products_map, size={len(self.map_product_to_href)}")
+
+        return self.__map_product_to_href
+
+    @property
+    def map_service_to_href(self):
+        if self.__map_service_to_href is None:
+            self.__map_service_to_href = self._get_meta_href_map(
+                entity_url=ApiUrls.get_service_entity_url(),
+                key_field_name='code',
+            )
+            logging.info(f"Lazy loaded services_map, size={len(self.map_service_to_href)}")
+
+        return self.__map_service_to_href
 
     def _get_meta_href_map(self, entity_url: str, data_section_name='rows', key_field_name='name', query: Query=None):
         response = self._http_client.get(
@@ -106,54 +124,70 @@ class MoySkladClient():
 
         return pd.DataFrame(data=res_arr).set_index('sku')
 
-    def get_id_by_order_id(self, order_id):
+    def get_order_by_ms_order_id(self, ms_order_id: str):
+        try:
+            response = self._http_client.get(
+                method=ApiUrls.get_customerorder_entity_url(id=ms_order_id)
+            )
+
+            return response.data
+        except Exception as e:
+            logging.error(f"Order ms_order_id='{ms_order_id}' wasn't found. Reason: {e}")
+            return None
+
+    def get_order_by_order_name(self, order_name: str):
         response = self._http_client.get(
-            method=(ApiUrls.get_customerorder_entity_url()),
+            method=ApiUrls.get_customerorder_entity_url(),
             query=Query(
-                Filter().eq('name', order_id)
+                Filter().eq('name', order_name),
+                Select(1)
             )
         )
 
         rows = response.data['rows']
         if len(rows) > 0:
-            return rows[0]['id']
+            return rows[0]
         else:
             return None
 
-    def get_customer_order_by_order_id(self, order_id):
-        id = self.get_id_by_order_id(order_id)
-        if id is None:
-            return None
+    def get_order_state_by_href(self, val: str):
+        for order_state, href in self.map_order_state_to_href.items():
+            if val == href:
+                return order_state
 
-        response = self._http_client.get(
-            method=(ApiUrls.get_customerorder_entity_url(id)),
-            query=Query(
-                Expand('state')
-            )
-        )
+        return None
 
-        return response.data
+    def update_order_state(self, order_name, new_state):
+        ms_order = self.get_order_by_order_name(order_name)
 
-    def update_order_state(self, order_id, new_state):
-        customer_order = self.get_customer_order_by_order_id(order_id)
-
-        if customer_order is None:
-            logging.error(f"Order {order_id} not found. Can't update state for order")
+        if ms_order is None:
+            logging.error(f"Order {order_name} not found. Can't update state for order")
             return
 
-        old_state = customer_order['state']['name']
-        if new_state != old_state:
-            self._http_client.put(
-                method=ApiUrls.get_customerorder_entity_url(customer_order['id']),
-                data={
-                    'state': {
-                        'meta': {
-                            'href': self.map_order_state_to_href[new_state],
-                            'type': "state"
-                        }
+        cur_state = self.get_order_state_by_href(ms_order['state']['meta']['href'])
+        if new_state == cur_state:
+            logging.info(f"Order '{order_name}' state isn't updated. Already has state={cur_state}")
+            return ms_order
+
+        response = self._http_client.put(
+            method=ApiUrls.get_customerorder_entity_url(ms_order['id']),
+            data={
+                'state': {
+                    'meta': {
+                        'href': self.map_order_state_to_href[new_state],
+                        'type': "state"
                     }
                 }
-            )
+            }
+        )
+
+        if response.response.ok:
+            data = response.data
+            logging.info(f"Order '{data['name']}' (ms_order_id='{data['id']}') state updated at '{data['updated']}'")
+            return data
+        else:
+            logging.error(f"Order '{order_name}' state isn't updated. Reason: {response.response.reason}")
+            return None
 
     # ----- Counterparty section -----
     def get_counterparty_by_phone(self, client_phone):
@@ -183,7 +217,7 @@ class MoySkladClient():
                 "phone": order.client_phone,
                 "email": order.client_email,
                 "companyType": "individual",
-                "tags": ["клиенты интернет-магазинов"]
+                "tags": ["api", "клиенты интернет-магазинов"]
             }
         )
 
@@ -220,8 +254,10 @@ class MoySkladClient():
     def create_demand(self, ms_order_id: str, order: Order):
         data = self.create_demand_template(ms_order_id=ms_order_id)
 
+        # set date created
         data['moment'] = order.moment_as_str()
 
+        # set losses
         overhead = order.get_overhead(x100=True)
         if overhead > 0:
             data['overhead'] = {
@@ -230,6 +266,14 @@ class MoySkladClient():
             }
 
             data['description'] = none2empty(data.get('description')) + '\n' + order.get_overhead_desc()
+
+        # set API project
+        data['project'] = {
+            "meta": {
+                "href": self.endpoint + "/" + ApiUrls.get_project_entity_url(self.api_project_id),
+                "type": "project",
+            }
+        }
 
         response = self._http_client.post(
             method=ApiUrls.get_demand_entity_url(),
@@ -244,9 +288,25 @@ class MoySkladClient():
             logging.error(f"Demand for ms_order_id='{ms_order_id}' isn't created. Reason: {response.response.reason}")
             return None
 
+    def remove_order_by_order_name(self, order_name: str):
+        ms_order = self.get_order_by_order_name(order_name)
+        return self.remove_order(ms_order['id'])
+
+    def remove_order(self, ms_order_id: str):
+        try:
+            self._http_client.delete(
+                method=ApiUrls.get_customerorder_entity_url(id=ms_order_id)
+            )
+
+            logging.info(f"Order ms_order_id='{ms_order_id}' is removed")
+            return True
+        except Exception as e:
+            logging.error(f"Order ms_order_id='{ms_order_id}' wasn't removed. Reason: {e}")
+            return False
+
 
     # ----- Order section -----
-    def create_order(self, order: Order, state='Новый'):
+    def create_order(self, order: Order, state='Новый') -> Optional[Dict]:
         def generate_positions_section():
 
             # Add delivery client price as separate product
@@ -279,6 +339,12 @@ class MoySkladClient():
 
 
             return positions
+
+        # # check order
+        # ms_order = self.get_id_by_order_id(order_id=order.order_id)
+        # if ms_order is not None:
+        #     logging.info(f"Order '{order.order_id}' (ms_order_id='{ms_order['id']}') already exist. Was created at '{ms_order['created']}'")
+        #     return ms_order
 
         counterparty = self.find_or_create_counterparty(order)
         positions_section = generate_positions_section()
@@ -342,9 +408,6 @@ class MoySkladClient():
         else:
             logging.error(f"Order '{order.order_id}' isn't created. Reason: {response.response.reason}")
             return None
-
-
-
 
 
 class ApiUrls:

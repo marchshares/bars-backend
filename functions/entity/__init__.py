@@ -30,8 +30,8 @@ class Order:
     client_phone: str
     client_email: str
     delivery_company: str
-    delivery_address: str
-    delivery_client_price: float
+    delivery_address: str = ""
+    delivery_client_price: float = 0.0
     delivery_our_price: float = 0.0
     warehouse: str
 
@@ -106,5 +106,8 @@ class Order:
 
                 last = self.products[-1]
                 last.price += self.products_price - s
+
+    def __repr__(self):
+        return str(self)
 
 

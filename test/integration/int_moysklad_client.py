@@ -4,84 +4,76 @@ import logging
 from datetime import datetime
 from random import randint
 import pandas as pd
+import warnings
+from unittest import TestCase, mock
 
 from functions.message.message_publisher import MessagePublisher
 from functions.entity import Order, Product
 from functions.services.moysklad_controller import MoySkladClient
 
 
-class MoySkladClientInt:
-    def __init__(self):
+class MoySkladClientIntTest(TestCase):
+
+    def setUp(self):
+        warnings.simplefilter("ignore", ResourceWarning)
         self.ms_client = MoySkladClient(config.MOYSKLAD_LOGIN, config.MOYSKLAD_PASSWORD)
+        self.created_orders = []
 
-    def create_counterparty(self):
-        order = Order(order_id="123458")
-        order.client_name = "Мистер Тест"
-        order.client_phone = "+7 (999) 999-9999"
+    def tearDown(self):
+        for orders in self.created_orders:
+            self.ms_client.remove_order(orders)
 
-        res = self.ms_client.find_or_create_counterparty(order)
-        print(res)
+    def test_should_init_maps(self):
+        self.assertGreater(len(self.ms_client.map_service_to_href),     0)
+        self.assertGreater(len(self.ms_client.map_store_to_href),       0)
+        self.assertGreater(len(self.ms_client.map_order_state_to_href), 0)
+        self.assertGreater(len(self.ms_client.map_product_to_href),     0)
 
-    def get_counterparty_by_phone(self):
-        client_phone = "+7 (999) 999-9999"
+    def test_should_create_and_remove(self):
+        order = self.create_test_order()
 
-        res = self.ms_client.get_counterparty_by_phone(client_phone)
-        print(res)
+        ms_order = self.ms_client.create_order(order)
+        self.assertIsNotNone(ms_order)
 
-    def enrich_product_prices(self):
-        order = Order(order_id="123458")
+        result = self.ms_client.remove_order(ms_order['id'])
+        self.assertTrue(result)
 
-        order.products_price = 12830
-        order.add_product(Product("WCCN80", None, 1))
-        order.add_product(Product("WCCNANS", None, 1))
-        order.add_product(Product("WCCBRST", None, 1))
-        order.add_product(Product("WCCNLC", None, 1))
+        ms_order = self.ms_client.get_order_by_ms_order_id(ms_order['id'])
+        self.assertIsNone(ms_order)
 
-        df_with_prices = self.ms_client.get_product_to_price_df()
-        order.enrich_product_prices(df_with_prices=df_with_prices)
+    def test_should_update(self):
+        order = self.create_test_order()
 
-        print(order.products)
-        print(order.products_price, sum([p.price for p in order.products]))
+        # create order in ms
+        ms_order = self.ms_client.create_order(order)
+        cur_state = self.ms_client.get_order_state_by_href(val=ms_order['state']['meta']['href'])
 
-    def get_product_to_price_map(self):
-        res = self.ms_client.get_product_to_price_df()
-        df = pd.DataFrame(res)
-        print(res)
+        self.created_orders.append(ms_order['id'])
 
-    def test_create_order(self):
+        # 1. check state - should be Новый
+        self.assertEqual(cur_state, "Новый")
+
+        ms_order = self.ms_client.update_order_state(order_name=order.order_id, new_state="Доставлен")
+        cur_state = self.ms_client.get_order_state_by_href(val=ms_order['state']['meta']['href'])
+
+        # 2. check state - should be updated - Доставлен
+        self.assertEqual(cur_state, "Доставлен")
+
+        ms_order = self.ms_client.update_order_state(order_name=order.order_id, new_state="Доставлен")
+        cur_state = self.ms_client.get_order_state_by_href(val=ms_order['state']['meta']['href'])
+
+        # 3. check state - should be the same - Доставлен
+        self.assertEqual(cur_state, "Доставлен")
+
+    def create_test_order(self):
         order = Order(order_id=str(randint(100000, 999999)))
-        # order = Order(order_id="275121")
         order.client_name = "Мистер Тест"
         order.client_phone = "+7 (999) 999-9999"
-        order.client_email = "test@test.ru"
         order.city = "Москва"
-        order.delivery_address = "TUL9, ул. Макаренко, 1А"
-        order.delivery_company = "Грастин"
-        order.delivery_our_price = 450.0
-        order.delivery_client_price = 300.0
         order.warehouse = "Imsklad"
-        # order.moment = datetime.strptime("02.01.2021 20:06:15", "%d.%m.%Y  %H:%M:%S")
+        order.delivery_company = "Грастин"
         order.moment = datetime.now()
 
-        order.payment_system = 'yakassa'
-        order.payment_tax = 226.45
-
-        order.products_price = 6470
-        # order.add_product(Product("WCCNMC", None, 1))
-        order.add_product(Product("WCCN80", None, 1))
-        order.add_product(Product("WCCNANS", None, 1))
-        # order.add_product(Product("6200697", None, 1))
-
-        df_with_prices = self.ms_client.get_product_to_price_df()
-        order.enrich_product_prices(df_with_prices=df_with_prices)
-        ms_order = self.ms_client.create_order(order, state='Доставлен')
-        if ms_order is not None:
-            self.ms_client.create_demand(ms_order_id=ms_order['id'], order=order)
-
-
-print(datetime.now())
-MoySkladClientInt().test_create_order()
-# MoySkladClientInt().enrich_product_prices()
-print(datetime.now())
+        return order
 
 
