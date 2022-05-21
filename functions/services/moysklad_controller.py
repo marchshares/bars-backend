@@ -1,8 +1,9 @@
 import logging
-from typing import Dict, AnyStr, Optional
+from typing import Dict, AnyStr, Optional, List
 
 from moysklad.queries import Expand, Filter, Query, Search, Select
 
+from datetime import datetime
 import config
 import pandas as pd
 from moysklad.api import MoySklad
@@ -11,6 +12,7 @@ from functions.entity import Order, Product
 from functions.services import ServiceController
 from functions.utils import none2empty
 
+DATE_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 class MoySkladController(ServiceController):
 
@@ -31,6 +33,7 @@ class MoySkladController(ServiceController):
 class MoySkladClient():
     DELIVERY_SKU = "DLVR"
     my_organization_id = "67f4100e-daaf-11eb-0a80-06ae00283b54"
+    inhouse_counterparty_id = "fb0e5d3b-e9a2-11eb-0a80-01c10014d68b"
     api_project_id = "a1688770-8ce5-11ec-0a80-05e60023f07c"
     attr_delivery_company_id = "6ad182c0-dff9-11eb-0a80-03680022940d"
 
@@ -409,6 +412,112 @@ class MoySkladClient():
             logging.error(f"Order '{order.order_id}' isn't created. Reason: {response.response.reason}")
             return None
 
+    def create_supply(self, invoicein_id: str, moment: datetime):
+        data = self.create_supply_template(invoicein_id=invoicein_id)
+
+        data['applicable'] = False
+        data['moment'] = moment.strftime(DATE_TIME_FORMAT)
+
+        response = self._http_client.post(
+            method=ApiUrls.get_supply_entity_url(),
+            data=data
+        )
+
+        if response.response.ok:
+            data = response.data
+            logging.info(f"Supply '{data['name']}' (invoicein_id='{data['id']}') created at '{data['created']}'")
+            return data
+        else:
+            logging.error(f"Supply for invoicein_id='{invoicein_id}' isn't created. Reason: {response.response.reason}")
+            return None
+
+    def create_supply_template(self, invoicein_id: str):
+        response = self._http_client.put(
+            method=ApiUrls.get_supply_entity_url() + "/new",
+            data={
+                "invoicesIn": [
+                    {
+                        "meta": {
+                            "href": self.endpoint + "/" + ApiUrls.get_invoicein_entity_url(invoicein_id),
+                            "type": "invoicein",
+                        }
+                    }
+                ]
+            }
+        )
+
+        if response.response.ok:
+            data = response.data
+            logging.info(f"Supply template for invoicein_id='{invoicein_id}' created")
+            return data
+        else:
+            logging.error(f"Supply template for invoicein_id='{invoicein_id}' isn't created. Reason: {response.response.reason}")
+            return None
+
+    def create_invoicein(self, products: List[Product], invoice_num, invoice_date: datetime):
+        def generate_positions_section():
+
+            positions = []
+            for p in products:
+                positions.append(
+                    {
+                        "quantity": p.quantity,
+                        "price": p.get_price(x100=True),
+                        "assortment": {
+                            "meta": {
+                                "href": self.map_product_to_href[p.sku],
+                                "type": "product",
+                            }
+                        }
+                    }
+                )
+
+            return positions
+
+        positions_section = generate_positions_section()
+
+        response = self._http_client.post(
+            method=ApiUrls.get_invoicein_entity_url(),
+            data={
+                "incomingNumber": invoice_num,
+                "incomingDate": invoice_date.strftime(DATE_TIME_FORMAT),
+                "moment": invoice_date.strftime(DATE_TIME_FORMAT),
+                "organization": {
+                    "meta": {
+                        "href": self.endpoint + "/" + ApiUrls.get_organization_entity_url(self.my_organization_id),
+                        "type": "organization",
+                    }
+                },
+                "agent": {
+                    "meta": {
+                        "href": self.endpoint + "/" + ApiUrls.get_counterparty_entity_url(self.inhouse_counterparty_id),
+                        "type": "counterparty",
+                    }
+                },
+                "store": {
+                    "meta": {
+                        "href": self.map_store_to_href["Основной склад"],
+                        "type": "store",
+                    }
+                },
+                "project": {
+                    "meta": {
+                        "href": self.endpoint + "/" + ApiUrls.get_project_entity_url(self.api_project_id),
+                        "type": "project",
+                    }
+                },
+                "positions": positions_section
+            }
+        )
+
+        if response.response.ok:
+            data = response.data
+            logging.info(f"Invoice in '{data['name']}' created at '{data['created']}'")
+            return data
+        else:
+            logging.error(f"Invoice in isn't created. Reason: {response.response.reason}")
+            return None
+
 
 class ApiUrls:
     @staticmethod
@@ -427,6 +536,10 @@ class ApiUrls:
         return f'entity/demand'
 
     @staticmethod
+    def get_supply_entity_url():
+        return f'entity/supply'
+
+    @staticmethod
     def get_store_entity_url():
         return f'entity/store'
 
@@ -437,6 +550,13 @@ class ApiUrls:
     @staticmethod
     def get_service_entity_url():
         return f'entity/service'
+
+    @staticmethod
+    def get_invoicein_entity_url(id=None):
+        if id is not None:
+            return f'entity/invoicein/{id}'
+
+        return f'entity/invoicein/'
 
     @staticmethod
     def get_customerorder_metadata_attributes_entity_url(id=None):
@@ -451,7 +571,7 @@ class ApiUrls:
 
     @staticmethod
     def get_counterparty_entity_url(id):
-        return f'entity/counterparty/{id}'    \
+        return f'entity/counterparty/{id}'
 
     @staticmethod
     def get_project_entity_url(id):
